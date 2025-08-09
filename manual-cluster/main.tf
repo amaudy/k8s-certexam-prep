@@ -1,8 +1,9 @@
 locals {
-  droplet_count = 3
-  region        = "sgp1"
-  image         = "ubuntu-22-04-x64"
-  size          = "s-1vcpu-2gb" # Adjust as needed
+  droplet_count    = 3
+  region           = "sgp1"
+  image            = "ubuntu-22-04-x64"
+  size             = "s-1vcpu-2gb" # Adjust as needed
+  monitoring_size  = "s-2vcpu-4gb" # Larger size for monitoring services
 }
 
 # Discover caller public IPv4 address automatically
@@ -214,14 +215,10 @@ resource "digitalocean_firewall" "kubernetes_cluster" {
 
 resource "digitalocean_project_resources" "attach" {
   project = digitalocean_project.cluster.id
-  resources = [
-    for d in digitalocean_droplet.nodes : d.urn
-  ]
-}
-
-output "droplet_ips" {
-  description = "Public IPv4 addresses of droplets"
-  value       = [for d in digitalocean_droplet.nodes : d.ipv4_address]
+  resources = concat(
+    [for d in digitalocean_droplet.nodes : d.urn],
+    [digitalocean_droplet.monitoring.urn]
+  )
 }
 
 
