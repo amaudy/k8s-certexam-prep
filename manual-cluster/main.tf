@@ -34,11 +34,40 @@ resource "digitalocean_droplet" "nodes" {
   # Add k8s-node tag for firewall rules
   tags = ["k8s-node"]
 
-  # Basic cloud-init to ensure packages are up to date
+  # Enhanced cloud-init for system setup
   user_data = <<-EOT
     #cloud-config
     package_update: true
     package_upgrade: true
+    package_reboot_if_required: true
+    
+    # Install essential packages for Kubernetes
+    packages:
+      - curl
+      - wget
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - htop
+      - vim
+      - git
+    
+    # Run commands after packages are installed
+    runcmd:
+      - echo "System setup completed at $(date)" >> /var/log/cloud-init-custom.log
+      - systemctl enable ssh
+      - systemctl start ssh
+      
+    # Set timezone
+    timezone: Asia/Singapore
+    
+    # Configure automatic security updates
+    apt:
+      sources:
+        docker.list:
+          source: deb [arch=amd64] https://download.docker.com/linux/ubuntu $RELEASE stable
+          keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
   EOT
 
   monitoring = true
