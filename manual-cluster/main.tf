@@ -3,10 +3,16 @@ locals {
   region        = "sgp1"
   image         = "ubuntu-22-04-x64"
   size          = "s-1vcpu-2gb" # Adjust as needed
-  ssh_key_names = []             # Optionally set to match your DO account SSH key names
 }
 
-data "digitalocean_ssh_keys" "all" {}
+# Discover caller public IPv4 address automatically
+data "http" "ip_echo" {
+  url = "https://api.ipify.org?format=text"
+}
+
+locals {
+  caller_ipv4_cidr = "${trimspace(data.http.ip_echo.response_body)}/32"
+}
 
 resource "digitalocean_project" "cluster" {
   name        = "manual-cluster"
@@ -22,8 +28,11 @@ resource "digitalocean_droplet" "nodes" {
   size   = local.size
   image  = local.image
 
-  # Attach all account SSH keys unless overridden
-  ssh_keys = length(local.ssh_key_names) > 0 ? [for k in data.digitalocean_ssh_keys.all.ssh_keys : k.fingerprint if contains(local.ssh_key_names, k.name)] : [for k in data.digitalocean_ssh_keys.all.ssh_keys : k.fingerprint]
+  # Use specific SSH key from CLAUDE.md
+  ssh_keys = ["49123679"]
+
+  # Add k8s-node tag for firewall rules
+  tags = ["k8s-node"]
 
   # Basic cloud-init to ensure packages are up to date
   user_data = <<-EOT
@@ -41,26 +50,135 @@ resource "digitalocean_droplet" "nodes" {
   }
 }
 
-resource "digitalocean_firewall" "ssh_web" {
-  name = "manual-cluster-allow-ssh"
+resource "digitalocean_firewall" "kubernetes_cluster" {
+  name = "kubernetes-cluster-firewall"
 
   droplet_ids = [for d in digitalocean_droplet.nodes : d.id]
 
+  # SSH access from caller IP
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
-    source_addresses = ["0.0.0.0/0", "::/0"]
+    source_addresses = [local.caller_ipv4_cidr]
   }
 
+  # Kubernetes API server access from caller IP
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "6443"
+    source_addresses = [local.caller_ipv4_cidr]
+  }
+
+  # HTTP/HTTPS access from caller IP (for applications)
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "80"
+    source_addresses = [local.caller_ipv4_cidr]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "443"
+    source_addresses = [local.caller_ipv4_cidr]
+  }
+
+  # NodePort services access from caller IP
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "30000-32767"
+    source_addresses = [local.caller_ipv4_cidr]
+  }
+
+  # Inter-node communication - Kubernetes API server
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "6443"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - etcd server client API
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "2379-2380"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - Kubelet API
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "10250"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - kube-scheduler
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "10259"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - kube-controller-manager
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "10257"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - Container Network Interface (CNI)
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "179"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - VXLAN (Flannel)
+  inbound_rule {
+    protocol    = "udp"
+    port_range  = "4789"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - Calico BGP
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "179"
+    source_tags = ["k8s-node"]
+  }
+
+  # Inter-node communication - Calico VXLAN
+  inbound_rule {
+    protocol    = "udp"
+    port_range  = "4789"
+    source_tags = ["k8s-node"]
+  }
+
+  # ICMP for ping/traceroute from caller IP
+  inbound_rule {
+    protocol         = "icmp"
+    source_addresses = [local.caller_ipv4_cidr]
+  }
+
+  # Inter-node ICMP
+  inbound_rule {
+    protocol    = "icmp"
+    source_tags = ["k8s-node"]
+  }
+
+  # Allow all outbound traffic
   outbound_rule {
     protocol              = "tcp"
-    port_range            = "0"
+    port_range            = "1-65535"
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 
   outbound_rule {
     protocol              = "udp"
-    port_range            = "0"
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "icmp"
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 }
