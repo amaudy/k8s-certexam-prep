@@ -28,8 +28,8 @@ resource "digitalocean_droplet" "nodes" {
   size   = local.size
   image  = local.image
 
-  # Use specific SSH key from CLAUDE.md
-  ssh_keys = ["49123679"]
+  # Use SSH key ID from variable
+  ssh_keys = [var.ssh_key_id]
 
   # Add k8s-node tag for firewall rules
   tags = ["k8s-node"]

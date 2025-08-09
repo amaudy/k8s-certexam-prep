@@ -16,4 +16,9 @@ terraform {
 # Provider will read the token from the DIGITALOCEAN_TOKEN environment variable
 provider "digitalocean" {}
 
+variable "ssh_key_id" {
+  description = "DigitalOcean SSH key ID to use for droplets"
+  type        = string
+}
+
 
