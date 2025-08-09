@@ -56,19 +56,12 @@ resource "digitalocean_droplet" "nodes" {
     
     # Run commands after packages are installed
     runcmd:
-      - echo "System setup completed at $(date)" >> /var/log/cloud-init-custom.log
+      - echo "Kubernetes node setup completed at $(date)" >> /var/log/cloud-init-custom.log
       - systemctl enable ssh
       - systemctl start ssh
       
     # Set timezone
     timezone: Asia/Singapore
-    
-    # Configure automatic security updates
-    apt:
-      sources:
-        docker.list:
-          source: deb [arch=amd64] https://download.docker.com/linux/ubuntu $RELEASE stable
-          keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
   EOT
 
   monitoring = true

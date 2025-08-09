@@ -22,28 +22,26 @@ resource "digitalocean_droplet" "monitoring" {
     packages:
       - curl
       - wget
-      - apt-transport-https
-      - ca-certificates
-      - gnupg
-      - lsb-release
       - htop
       - vim
       - git
-      - docker.io
-      - docker-compose
       - ufw
+      - snapd
     
     # Run commands after packages are installed
     runcmd:
       - echo "Monitoring server setup started at $(date)" >> /var/log/cloud-init-custom.log
       - systemctl enable ssh
       - systemctl start ssh
-      - systemctl enable docker
-      - systemctl start docker
-      - usermod -aG docker root
+      - echo "Installing Docker via snap..." >> /var/log/cloud-init-custom.log
+      - snap install docker
+      - snap install docker-compose
+      - echo "Docker installation completed at $(date)" >> /var/log/cloud-init-custom.log
       - mkdir -p /opt/monitoring/{prometheus,grafana,alertmanager}
       - chown -R root:root /opt/monitoring
-      - echo "Creating monitoring directories completed at $(date)" >> /var/log/cloud-init-custom.log
+      - echo "Starting monitoring stack..." >> /var/log/cloud-init-custom.log
+      - cd /opt/monitoring && docker-compose up -d
+      - echo "Monitoring stack setup completed at $(date)" >> /var/log/cloud-init-custom.log
       
     # Set timezone
     timezone: Asia/Singapore
